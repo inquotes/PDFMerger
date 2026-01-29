@@ -28,6 +28,9 @@ build/
 *.app/
 *.dmg
 *.spec
+build/
+dist/
+icon.iconset/
 
 # Test PDFs (optional - remove if you want to commit test files)
 test_pdfs/
