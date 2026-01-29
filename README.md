@@ -1,4 +1,4 @@
-# PDF Merger
+# PDF Stitcher
 
 A native macOS desktop app to merge PDF files with a modern, intuitive interface.
 
@@ -37,7 +37,7 @@ brew install python-tk@3.13
 ### 2. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/PDFMerger.git
+git clone https://github.com/inquotes/PDFMerger.git
 cd PDFMerger
 ```
 
@@ -68,7 +68,36 @@ python main.py
 
 ## Building as a .app
 
-*Coming soon - Instructions for packaging with py2app or PyInstaller*
+### For Development
+
+The pre-built app is available in the `dist/` folder after running:
+
+```bash
+source venv/bin/activate
+pip install pyinstaller
+pyinstaller --name="PDF Stitcher" --windowed --icon=icon.icns main.py
+```
+
+The app will be created at `dist/PDF Stitcher.app`
+
+### For Distribution
+
+**Simple sharing (friends/family):**
+```bash
+cd dist
+zip -r "PDF Stitcher.zip" "PDF Stitcher.app"
+```
+Recipients: Right-click → Open on first launch to bypass Gatekeeper.
+
+**Code signing (optional, requires Apple Developer account):**
+```bash
+codesign --deep --force --verify --verbose --sign "Developer ID Application: YourName" "PDF Stitcher.app"
+```
+
+**Notarization (optional, for wider distribution):**
+```bash
+xcrun notarytool submit "PDF Stitcher.zip" --apple-id <email> --password <app-password> --team-id <team-id>
+```
 
 ## Dependencies
 
@@ -83,8 +112,12 @@ python main.py
 PDFMerger/
 ├── main.py           # Main application code
 ├── requirements.txt  # Python dependencies
-├── venv/            # Virtual environment (not in git)
-└── README.md        # This file
+├── icon.icns         # App icon
+├── setup.py          # py2app configuration (legacy)
+├── venv/             # Virtual environment (not in git)
+├── build/            # Build artifacts (not in git)
+├── dist/             # Built .app bundle (not in git)
+└── README.md         # This file
 ```
 
 ### Contributing
@@ -97,7 +130,7 @@ MIT License - feel free to use this project however you'd like.
 
 ## Roadmap
 
-- [ ] Package as standalone .app
+- [x] Package as standalone .app
 - [ ] Add drag-and-drop support
 - [ ] Page range selection for individual PDFs
 - [ ] PDF preview thumbnails

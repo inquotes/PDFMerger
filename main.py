@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PDF Merger - A native macOS app to merge PDF files
+PDF Stitcher - A native macOS app to merge PDF files
 Uses CustomTkinter for modern UI and pypdf for merging
 """
 
@@ -16,7 +16,7 @@ class PDFMergerApp(ctk.CTk):
         super().__init__()
         
         # Configure window
-        self.title("PDF Merger")
+        self.title("PDF Stitcher")
         self.geometry("700x500")
         self.minsize(500, 400)
         
