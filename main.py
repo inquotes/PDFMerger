@@ -168,6 +168,10 @@ class PDFMergerApp(Tk):
         # Track selected item
         self.selected_index = None
         self.file_rows = []  # List of row frames
+
+        # Window-level drag/drop bindings so events fire even outside the list
+        self.bind("<B1-Motion>", self._on_window_drag)
+        self.bind("<ButtonRelease-1>", self._on_row_drop)
     
     def _add_files(self):
         """Open file dialog to add PDF files."""
@@ -212,7 +216,7 @@ class PDFMergerApp(Tk):
                 fg_color="gray25" if idx == self.selected_index else "transparent",
                 corner_radius=6
             )
-            row_frame.grid(row=idx * 2, column=0, pady=2, sticky="ew")
+            row_frame.grid(row=idx * 2 + 1, column=0, pady=2, sticky="ew")
             row_frame.grid_columnconfigure(2, weight=1)
 
             # Drag grip icon
@@ -246,11 +250,9 @@ class PDFMergerApp(Tk):
             )
             date_label.grid(row=0, column=3, padx=(5, 10), pady=8)
 
-            # Bind click and drag events
+            # Bind click on each row widget to identify which row was clicked
             for widget in [row_frame, grip_label, idx_label, name_label, date_label]:
                 widget.bind("<Button-1>", lambda e, i=idx: self._on_row_click(e, i))
-                widget.bind("<B1-Motion>", lambda e, i=idx: self._on_row_drag(e, i))
-                widget.bind("<ButtonRelease-1>", lambda e: self._on_row_drop(e))
 
             self.file_rows.append(row_frame)
         
@@ -323,6 +325,11 @@ class PDFMergerApp(Tk):
         self._drag_source_index = index
         self._select_item(index)
 
+    def _on_window_drag(self, event):
+        """Window-level drag handler — delegates to row drag if active."""
+        if self._drag_source_index is not None:
+            self._on_row_drag(event, self._drag_source_index)
+
     def _on_row_drag(self, event, source_index):
         """Handle dragging a row to reorder."""
         if self._drag_source_index is None:
@@ -353,27 +360,26 @@ class PDFMergerApp(Tk):
                 height=30,
             )
 
-        # Position the ghost near the cursor
+        # Calculate absolute cursor position
         try:
-            widget = event.widget
-            abs_x = widget.winfo_rootx() + event.x
-            abs_y = widget.winfo_rooty() + event.y
-            ghost_x = abs_x - self.winfo_rootx() + 12
-            ghost_y = abs_y - self.winfo_rooty() - 15
-            self._drag_ghost.place(x=ghost_x, y=ghost_y)
-            self._drag_ghost.lift()
-        except Exception:
-            pass
-
-        # Get the y position relative to the scrollable list
-        try:
-            widget = event.widget
-            y_in_list = widget.winfo_rooty() + event.y - self.scrollable_list.winfo_rooty()
+            abs_x = event.widget.winfo_rootx() + event.x
+            abs_y = event.widget.winfo_rooty() + event.y
         except Exception:
             return
 
-        # Determine target index based on y position
-        target_index = len(self.file_rows) - 1
+        # Position the ghost near the cursor
+        ghost_x = abs_x - self.winfo_rootx() + 12
+        ghost_y = abs_y - self.winfo_rooty() - 15
+        self._drag_ghost.place(x=ghost_x, y=ghost_y)
+        self._drag_ghost.lift()
+
+        # Get y position relative to the scrollable list
+        y_in_list = abs_y - self.scrollable_list.winfo_rooty()
+
+        # Determine target insertion index based on y position
+        # target_index means "insert before this index"
+        # target_index == len means "insert at the end"
+        target_index = len(self.file_rows)
         for i, row in enumerate(self.file_rows):
             row_y = row.winfo_y()
             row_h = row.winfo_height()
@@ -381,7 +387,7 @@ class PDFMergerApp(Tk):
                 target_index = i
                 break
 
-        target_index = max(0, min(target_index, len(self.file_rows) - 1))
+        target_index = max(0, min(target_index, len(self.file_rows)))
 
         if target_index != self._drag_target_index:
             self._drag_target_index = target_index
@@ -394,7 +400,7 @@ class PDFMergerApp(Tk):
             self._drag_indicator.destroy()
             self._drag_indicator = None
 
-        if target_index == self._drag_source_index:
+        if target_index == self._drag_source_index or target_index == self._drag_source_index + 1:
             return
 
         self._drag_indicator = ctk.CTkFrame(
@@ -403,9 +409,9 @@ class PDFMergerApp(Tk):
             fg_color="#1f6aa5",
             corner_radius=2,
         )
-        # Use grid to insert the indicator. File rows use rows 0,2,4,...
-        # so we place the indicator on the odd row just before the target.
-        indicator_grid_row = target_index * 2 + 1
+        # File rows use grid rows 1,3,5,... so indicator slots are 0,2,4,...
+        # target_index means "insert before this index", so grid row = target_index * 2
+        indicator_grid_row = target_index * 2
         self._drag_indicator.grid(row=indicator_grid_row, column=0, sticky="ew", padx=5, pady=0)
 
     def _on_row_drop(self, event):
@@ -425,17 +431,22 @@ class PDFMergerApp(Tk):
         self._drag_source_index = None
         self._drag_target_index = None
 
-        if src is None or dst is None or src == dst:
+        if src is None or dst is None:
             self._refresh_list()
             return
-        if not (0 <= src < len(self.pdf_files) and 0 <= dst < len(self.pdf_files)):
+        if dst == src or dst == src + 1:
+            # No actual move needed (same position)
+            self._refresh_list()
+            return
+        if not (0 <= src < len(self.pdf_files) and 0 <= dst <= len(self.pdf_files)):
             self._refresh_list()
             return
 
-        # Move the item
+        # Move the item: pop first, then adjust insert index
         item = self.pdf_files.pop(src)
-        self.pdf_files.insert(dst, item)
-        self.selected_index = dst
+        insert_at = dst if dst < src else dst - 1
+        self.pdf_files.insert(insert_at, item)
+        self.selected_index = insert_at
         self._refresh_list()
 
     def _move_up(self):
