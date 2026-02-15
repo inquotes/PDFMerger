@@ -1,0 +1,45 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python 3.12 from python.org
+        run: |
+          curl -L -o python-installer.pkg "https://www.python.org/ftp/python/3.12.8/python-3.12.8-macos11.pkg"
+          sudo installer -pkg python-installer.pkg -target /
+          echo "/Library/Frameworks/Python.framework/Versions/3.12/bin" >> $GITHUB_PATH
+
+      - name: Verify Tcl version
+        run: |
+          python3.12 -c "import tkinter; r=tkinter.Tk(); v=r.tk.call('info','patchlevel'); r.destroy(); print(f'Tcl {v}'); assert v.startswith('8.6'), f'Need Tcl 8.6, got {v}'"
+
+      - name: Create venv and install dependencies
+        run: |
+          python3.12 -m venv venv
+          source venv/bin/activate
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build app
+        run: |
+          source venv/bin/activate
+          pyinstaller "PDF Stitcher.spec" --noconfirm
+
+      - name: Zip app
+        run: |
+          cd dist
+          zip -r "PDF-Stitcher.zip" "PDF Stitcher.app"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/PDF-Stitcher.zip
+          generate_release_notes: true

@@ -28,6 +28,7 @@ build/
 *.app/
 *.dmg
 *.spec
+!PDF Stitcher.spec
 build/
 dist/
 icon.iconset/
