@@ -5,13 +5,21 @@ Uses CustomTkinter for modern UI and pypdf for merging
 """
 
 import os
+import re
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 from pypdf import PdfWriter
 from datetime import datetime
+from tkinterdnd2 import DND_FILES, TkinterDnD
 
 
-class PDFMergerApp(ctk.CTk):
+class Tk(ctk.CTk, TkinterDnD.DnDWrapper):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.TkdndVersion = TkinterDnD._require(self)
+
+
+class PDFMergerApp(Tk):
     def __init__(self):
         super().__init__()
         
@@ -26,8 +34,16 @@ class PDFMergerApp(ctk.CTk):
         
         # Store PDF file paths with metadata
         self.pdf_files = []  # List of dicts: {"path": str, "name": str, "created": datetime}
-        
+
+        # Drag-and-drop reorder state
+        self._drag_source_index = None
+        self._drag_target_index = None
+        self._drag_indicator = None
+        self._drag_ghost = None
+        self._drag_active = False
+
         self._create_ui()
+        self._setup_dnd()
     
     def _create_ui(self):
         # Main container with padding
@@ -85,7 +101,7 @@ class PDFMergerApp(ctk.CTk):
         # Placeholder label when empty
         self.empty_label = ctk.CTkLabel(
             self.scrollable_list,
-            text="No PDFs added yet.\nClick '+ Add PDFs' to get started.",
+            text="No PDFs added yet.\nClick '+ Add PDFs' or drag files here.",
             text_color="gray50",
             justify="center"
         )
@@ -196,21 +212,30 @@ class PDFMergerApp(ctk.CTk):
                 fg_color="gray25" if idx == self.selected_index else "transparent",
                 corner_radius=6
             )
-            row_frame.grid(row=idx, column=0, pady=2, sticky="ew")
-            row_frame.grid_columnconfigure(1, weight=1)
-            
+            row_frame.grid(row=idx * 2, column=0, pady=2, sticky="ew")
+            row_frame.grid_columnconfigure(2, weight=1)
+
+            # Drag grip icon
+            grip_label = ctk.CTkLabel(
+                row_frame, text="⠿", width=20,
+                text_color="gray50",
+                font=ctk.CTkFont(size=14),
+                cursor="hand2"
+            )
+            grip_label.grid(row=0, column=0, padx=(8, 0), pady=8)
+
             # Index number
             idx_label = ctk.CTkLabel(row_frame, text=f"{idx + 1}.", width=30)
-            idx_label.grid(row=0, column=0, padx=(10, 5), pady=8)
+            idx_label.grid(row=0, column=1, padx=(2, 5), pady=8)
             
             # File name
             name_label = ctk.CTkLabel(
-                row_frame, 
+                row_frame,
                 text=file_info["name"],
                 anchor="w"
             )
-            name_label.grid(row=0, column=1, padx=5, pady=8, sticky="ew")
-            
+            name_label.grid(row=0, column=2, padx=5, pady=8, sticky="ew")
+
             # Date created (smaller text)
             date_str = file_info["created"].strftime("%Y-%m-%d %H:%M")
             date_label = ctk.CTkLabel(
@@ -219,12 +244,14 @@ class PDFMergerApp(ctk.CTk):
                 text_color="gray50",
                 font=ctk.CTkFont(size=11)
             )
-            date_label.grid(row=0, column=2, padx=(5, 10), pady=8)
-            
-            # Bind click events
-            for widget in [row_frame, idx_label, name_label, date_label]:
-                widget.bind("<Button-1>", lambda e, i=idx: self._select_item(i))
-            
+            date_label.grid(row=0, column=3, padx=(5, 10), pady=8)
+
+            # Bind click and drag events
+            for widget in [row_frame, grip_label, idx_label, name_label, date_label]:
+                widget.bind("<Button-1>", lambda e, i=idx: self._on_row_click(e, i))
+                widget.bind("<B1-Motion>", lambda e, i=idx: self._on_row_drag(e, i))
+                widget.bind("<ButtonRelease-1>", lambda e: self._on_row_drop(e))
+
             self.file_rows.append(row_frame)
         
         # Update count label
@@ -235,7 +262,182 @@ class PDFMergerApp(ctk.CTk):
         """Select an item in the list."""
         self.selected_index = index
         self._refresh_list()
-    
+
+    # --- External drag-and-drop (from Finder via tkinterdnd2) ---
+
+    def _setup_dnd(self):
+        """Register the scrollable list as a drop target for files from Finder."""
+        target = self.scrollable_list._parent_frame
+        target.drop_target_register(DND_FILES)
+        target.dnd_bind("<<DropEnter>>", self._on_drop_enter)
+        target.dnd_bind("<<DropLeave>>", self._on_drop_leave)
+        target.dnd_bind("<<Drop>>", self._on_drop)
+
+    def _on_drop_enter(self, event):
+        self.scrollable_list.configure(border_color="#1f6aa5", border_width=2)
+        return event.action
+
+    def _on_drop_leave(self, event):
+        self.scrollable_list.configure(border_width=0)
+        return event.action
+
+    def _on_drop(self, event):
+        self.scrollable_list.configure(border_width=0)
+        paths = self._parse_drop_data(event.data)
+
+        added = 0
+        existing_paths = {f["path"] for f in self.pdf_files}
+        for path in paths:
+            if not path.lower().endswith(".pdf"):
+                continue
+            if path in existing_paths:
+                continue
+            if not os.path.isfile(path):
+                continue
+            stat = os.stat(path)
+            created = datetime.fromtimestamp(stat.st_birthtime)
+            self.pdf_files.append({
+                "path": path,
+                "name": os.path.basename(path),
+                "created": created,
+            })
+            existing_paths.add(path)
+            added += 1
+
+        if added:
+            self._refresh_list()
+        return event.action
+
+    @staticmethod
+    def _parse_drop_data(data):
+        """Parse tkinterdnd2 drop data into a list of file paths."""
+        results = []
+        for match in re.finditer(r'\{([^}]+)\}|(\S+)', data):
+            results.append(match.group(1) or match.group(2))
+        return results
+
+    # --- Internal drag-and-drop reorder ---
+
+    def _on_row_click(self, event, index):
+        """Handle click on a row — select it and prepare for potential drag."""
+        self._drag_source_index = index
+        self._select_item(index)
+
+    def _on_row_drag(self, event, source_index):
+        """Handle dragging a row to reorder."""
+        if self._drag_source_index is None:
+            return
+        if len(self.file_rows) < 2:
+            return
+
+        # Dim the source row and create ghost on first motion
+        src_row = self.file_rows[self._drag_source_index]
+        if not self._drag_active:
+            self._drag_active = True
+            src_row.configure(fg_color="gray20")
+            for child in src_row.winfo_children():
+                try:
+                    child.configure(text_color="gray50")
+                except Exception:
+                    pass
+            # Create a floating ghost label showing the dragged file name
+            file_name = self.pdf_files[self._drag_source_index]["name"]
+            self._drag_ghost = ctk.CTkLabel(
+                self,
+                text=f"  {file_name}  ",
+                fg_color="gray30",
+                corner_radius=4,
+                text_color="white",
+                font=ctk.CTkFont(size=13),
+                anchor="w",
+                height=30,
+            )
+
+        # Position the ghost near the cursor
+        try:
+            widget = event.widget
+            abs_x = widget.winfo_rootx() + event.x
+            abs_y = widget.winfo_rooty() + event.y
+            ghost_x = abs_x - self.winfo_rootx() + 12
+            ghost_y = abs_y - self.winfo_rooty() - 15
+            self._drag_ghost.place(x=ghost_x, y=ghost_y)
+            self._drag_ghost.lift()
+        except Exception:
+            pass
+
+        # Get the y position relative to the scrollable list
+        try:
+            widget = event.widget
+            y_in_list = widget.winfo_rooty() + event.y - self.scrollable_list.winfo_rooty()
+        except Exception:
+            return
+
+        # Determine target index based on y position
+        target_index = len(self.file_rows) - 1
+        for i, row in enumerate(self.file_rows):
+            row_y = row.winfo_y()
+            row_h = row.winfo_height()
+            if y_in_list < row_y + row_h // 2:
+                target_index = i
+                break
+
+        target_index = max(0, min(target_index, len(self.file_rows) - 1))
+
+        if target_index != self._drag_target_index:
+            self._drag_target_index = target_index
+            self._show_drag_indicator(target_index)
+
+    def _show_drag_indicator(self, target_index):
+        """Show a visual line indicating where the dragged item will be inserted."""
+        # Remove old indicator
+        if self._drag_indicator:
+            self._drag_indicator.destroy()
+            self._drag_indicator = None
+
+        if target_index == self._drag_source_index:
+            return
+
+        self._drag_indicator = ctk.CTkFrame(
+            self.scrollable_list,
+            height=5,
+            fg_color="#1f6aa5",
+            corner_radius=2,
+        )
+        # Use grid to insert the indicator. File rows use rows 0,2,4,...
+        # so we place the indicator on the odd row just before the target.
+        indicator_grid_row = target_index * 2 + 1
+        self._drag_indicator.grid(row=indicator_grid_row, column=0, sticky="ew", padx=5, pady=0)
+
+    def _on_row_drop(self, event):
+        """Finalize the reorder on mouse release."""
+        self._drag_active = False
+
+        if self._drag_ghost:
+            self._drag_ghost.destroy()
+            self._drag_ghost = None
+
+        if self._drag_indicator:
+            self._drag_indicator.destroy()
+            self._drag_indicator = None
+
+        src = self._drag_source_index
+        dst = self._drag_target_index
+        self._drag_source_index = None
+        self._drag_target_index = None
+
+        if src is None or dst is None or src == dst:
+            self._refresh_list()
+            return
+        if not (0 <= src < len(self.pdf_files) and 0 <= dst < len(self.pdf_files)):
+            self._refresh_list()
+            return
+
+        # Move the item
+        item = self.pdf_files.pop(src)
+        self.pdf_files.insert(dst, item)
+        self.selected_index = dst
+        self._refresh_list()
+
     def _move_up(self):
         """Move selected item up in the list."""
         if self.selected_index is None or self.selected_index == 0:

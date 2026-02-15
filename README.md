@@ -3,16 +3,17 @@
 A native macOS desktop app to merge PDF files with a modern, intuitive interface.
 
 ![macOS](https://img.shields.io/badge/macOS-10.14+-blue)
-![Python](https://img.shields.io/badge/python-3.13+-blue)
+![Python](https://img.shields.io/badge/python-3.12-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 ## Features
 
-✨ **Modern UI** - Built with CustomTkinter, automatically adapts to macOS dark/light mode  
-📄 **Easy File Management** - Add multiple PDFs with native file picker  
-🔄 **Flexible Ordering** - Reorder files with Move Up/Down buttons  
-📊 **Smart Sorting** - Sort by filename (A-Z) or creation date  
-💾 **Native Integration** - Uses macOS native "Save As" dialog  
+✨ **Modern UI** - Built with CustomTkinter, automatically adapts to macOS dark/light mode
+📄 **Easy File Management** - Add multiple PDFs with native file picker
+📂 **Drag & Drop** - Drag PDF files from Finder directly into the app
+🔄 **Flexible Ordering** - Drag to reorder files, or use Move Up/Down buttons
+📊 **Smart Sorting** - Sort by filename (A-Z) or creation date
+💾 **Native Integration** - Uses macOS native "Save As" dialog
 🎯 **Simple & Fast** - All features in one clean interface
 
 ## Screenshots
@@ -23,16 +24,15 @@ A native macOS desktop app to merge PDF files with a modern, intuitive interface
 ## Requirements
 
 - macOS 10.14 or later
-- Python 3.13+ with Tkinter support
-- Homebrew (for easy installation)
+- Python 3.12 from [python.org](https://www.python.org/downloads/release/python-3128/) (includes Tcl/Tk 8.6, required for drag-and-drop support)
+
+> **Note:** Homebrew Python ships with Tcl 9, which is incompatible with `tkinterdnd2`. Use the official python.org installer instead.
 
 ## Installation
 
-### 1. Install Python with Tkinter
+### 1. Install Python 3.12
 
-```bash
-brew install python-tk@3.13
-```
+Download and install from [python.org](https://www.python.org/downloads/release/python-3128/).
 
 ### 2. Clone the Repository
 
@@ -44,7 +44,7 @@ cd PDFMerger
 ### 3. Set Up Virtual Environment
 
 ```bash
-python3.13 -m venv venv
+python3.12 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
@@ -60,8 +60,8 @@ python main.py
 
 ### Using the App
 
-1. **Add PDFs** - Click "+ Add PDFs" and select files
-2. **Reorder** - Click a file to select it, then use Move Up/Down buttons
+1. **Add PDFs** - Click "+ Add PDFs" or drag files from Finder into the app
+2. **Reorder** - Drag files by the grip icon (⠿) to reorder, or use Move Up/Down buttons
 3. **Sort** - Use "Name" or "Date Created" buttons to auto-sort
 4. **Remove** - Select and click "Remove" to delete, or "Clear All" to start over
 5. **Merge** - Click "Merge PDFs" and choose where to save the result
@@ -103,6 +103,7 @@ xcrun notarytool submit "PDF Stitcher.zip" --apple-id <email> --password <app-pa
 
 - [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) - Modern UI framework
 - [pypdf](https://github.com/py-pdf/pypdf) - PDF manipulation library
+- [tkinterdnd2](https://github.com/pmgagne/tkinterdnd2) - Drag-and-drop support for Tkinter
 
 ## Development
 
@@ -131,7 +132,7 @@ MIT License - feel free to use this project however you'd like.
 ## Roadmap
 
 - [x] Package as standalone .app
-- [ ] Add drag-and-drop support
+- [x] Add drag-and-drop support
 - [ ] Page range selection for individual PDFs
 - [ ] PDF preview thumbnails
 - [ ] Remember last used directory
