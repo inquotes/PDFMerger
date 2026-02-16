@@ -24,7 +24,6 @@ MUTED_RUST = "#6B3020"
 MUTED_RUST_HOVER = "#552518"
 CREAM = "#FCEFD9"
 CREAM_MID = ("#F5E4C8", "#2B2B2B")       # panels / list frame (light, dark)
-CREAM_DEEP = ("#EDD5AE", "#1E1E1E")      # scrollable interior (light, dark)
 SELECTION_BG = ("#E2BA88", "#4A2010")     # selected row (light, dark)
 WARM_GRAY = "#8B8178"
 DIMMED_ROW = ("#E8CDB0", "#2A1A10")      # source row during drag (light, dark)
@@ -72,11 +71,11 @@ class PDFMergerApp(Tk):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
         
-        # === Top frame: Add files button and sort options ===
+        # === Top frame: Add files button ===
         top_frame = ctk.CTkFrame(self, fg_color="transparent")
         top_frame.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="ew")
-        top_frame.grid_columnconfigure(1, weight=1)
-        
+        top_frame.grid_columnconfigure(0, weight=1)
+
         add_btn = ctk.CTkButton(
             top_frame,
             text="+ Add PDFs",
@@ -86,47 +85,42 @@ class PDFMergerApp(Tk):
             hover_color=RUST_HOVER,
             text_color=BTN_TEXT
         )
-        add_btn.grid(row=0, column=0, padx=(0, 10))
-        
-        # Sort options
-        sort_label = ctk.CTkLabel(top_frame, text="Sort by:", text_color=WARM_GRAY)
-        sort_label.grid(row=0, column=2, padx=(10, 5))
-        
-        sort_name_btn = ctk.CTkButton(
-            top_frame,
-            text="Name",
-            command=self._sort_by_name,
-            width=80,
-            fg_color=MUTED_RUST,
-            hover_color=MUTED_RUST_HOVER,
-            text_color=BTN_TEXT
-        )
-        sort_name_btn.grid(row=0, column=3, padx=2)
+        add_btn.grid(row=0, column=0, sticky="w")
 
-        sort_date_btn = ctk.CTkButton(
-            top_frame,
-            text="Date Created",
-            command=self._sort_by_date,
-            width=100,
-            fg_color=MUTED_RUST,
-            hover_color=MUTED_RUST_HOVER,
-            text_color=BTN_TEXT
-        )
-        sort_date_btn.grid(row=0, column=4, padx=2)
-        
-        # === Middle frame: List view with scrollbar ===
-        list_frame = ctk.CTkFrame(self, fg_color=CREAM_MID)
-        list_frame.grid(row=1, column=0, padx=20, pady=10, sticky="nsew")
-        list_frame.grid_columnconfigure(0, weight=1)
-        list_frame.grid_rowconfigure(0, weight=1)
-
-        # Scrollable frame for the file list
+        # === Middle frame: Scrollable file list ===
         self.scrollable_list = ctk.CTkScrollableFrame(
-            list_frame, label_text="Files to Merge", label_text_color=RUST,
-            fg_color=CREAM_DEEP, label_fg_color=CREAM_MID
+            self, fg_color=CREAM_MID
         )
-        self.scrollable_list.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+        self.scrollable_list.grid(row=1, column=0, padx=20, pady=10, sticky="nsew")
         self.scrollable_list.grid_columnconfigure(0, weight=1)
+
+        # Column header row (shown only when files are present)
+        self.header_frame = ctk.CTkFrame(self.scrollable_list, fg_color="transparent")
+        self.header_frame.grid_columnconfigure(2, weight=1)
+
+        # Spacer matching grip (col 0) + index (col 1)
+        ctk.CTkLabel(self.header_frame, text="", width=20).grid(row=0, column=0, padx=(8, 0))
+        ctk.CTkLabel(self.header_frame, text="", width=30).grid(row=0, column=1, padx=(2, 5))
+
+        header_name_btn = ctk.CTkButton(
+            self.header_frame, text="File Name ↕", anchor="w",
+            fg_color="transparent", hover_color=SELECTION_BG,
+            text_color=(RUST, CREAM), font=ctk.CTkFont(size=12, weight="bold"),
+            command=self._sort_by_name, width=0
+        )
+        header_name_btn.grid(row=0, column=2, padx=5, sticky="w")
+
+        header_date_btn = ctk.CTkButton(
+            self.header_frame, text="Date ↕",
+            fg_color="transparent", hover_color=SELECTION_BG,
+            text_color=(RUST, CREAM), font=ctk.CTkFont(size=12, weight="bold"),
+            command=self._sort_by_date, width=0
+        )
+        header_date_btn.grid(row=0, column=3, padx=(5, 5))
+
+        # Spacer matching up/down button columns
+        ctk.CTkLabel(self.header_frame, text="", width=28).grid(row=0, column=4)
+        ctk.CTkLabel(self.header_frame, text="", width=28).grid(row=0, column=5, padx=(0, 8))
         
         # Placeholder label when empty
         self.empty_label = ctk.CTkLabel(
@@ -135,36 +129,15 @@ class PDFMergerApp(Tk):
             text_color=WARM_GRAY,
             justify="center"
         )
-        self.empty_label.grid(row=0, column=0, pady=50)
+        self.empty_label.grid(row=1, column=0, pady=50)
         
-        # === Right side buttons: Move Up/Down and Remove ===
-        btn_frame = ctk.CTkFrame(list_frame, fg_color="transparent")
-        btn_frame.grid(row=0, column=1, padx=(0, 10), pady=10, sticky="ns")
-        
-        move_up_btn = ctk.CTkButton(
-            btn_frame,
-            text="▲ Move Up",
-            command=self._move_up,
-            width=100,
-            fg_color=RUST,
-            hover_color=RUST_HOVER,
-            text_color=BTN_TEXT
-        )
-        move_up_btn.pack(pady=(50, 5))
+        # === Bottom frame: Remove/Clear left, Merge right ===
+        bottom_frame = ctk.CTkFrame(self, fg_color="transparent")
+        bottom_frame.grid(row=2, column=0, padx=20, pady=(10, 20), sticky="ew")
+        bottom_frame.grid_columnconfigure(2, weight=1)
 
-        move_down_btn = ctk.CTkButton(
-            btn_frame,
-            text="▼ Move Down",
-            command=self._move_down,
-            width=100,
-            fg_color=RUST,
-            hover_color=RUST_HOVER,
-            text_color=BTN_TEXT
-        )
-        move_down_btn.pack(pady=5)
-        
         remove_btn = ctk.CTkButton(
-            btn_frame,
+            bottom_frame,
             text="✕ Remove",
             command=self._remove_selected,
             width=100,
@@ -174,10 +147,10 @@ class PDFMergerApp(Tk):
             text_color=RUST,
             hover_color=RUST
         )
-        remove_btn.pack(pady=(20, 5))
-        
+        remove_btn.grid(row=0, column=0, padx=(0, 5))
+
         clear_btn = ctk.CTkButton(
-            btn_frame,
+            bottom_frame,
             text="Clear All",
             command=self._clear_all,
             width=100,
@@ -185,15 +158,8 @@ class PDFMergerApp(Tk):
             hover_color=MUTED_RUST_HOVER,
             text_color=BTN_TEXT
         )
-        clear_btn.pack(pady=5)
-        
-        # === Bottom frame: Merge button ===
-        bottom_frame = ctk.CTkFrame(self, fg_color="transparent")
-        bottom_frame.grid(row=2, column=0, padx=20, pady=(10, 20), sticky="ew")
-        bottom_frame.grid_columnconfigure(0, weight=1)
-        
-        self.file_count_label = ctk.CTkLabel(bottom_frame, text="0 files selected", text_color=WARM_GRAY)
-        self.file_count_label.grid(row=0, column=0, sticky="w")
+        clear_btn.grid(row=0, column=1, sticky="w")
+
         
         merge_btn = ctk.CTkButton(
             bottom_frame,
@@ -206,7 +172,7 @@ class PDFMergerApp(Tk):
             hover_color=RUST_HOVER,
             text_color=BTN_TEXT
         )
-        merge_btn.grid(row=0, column=1, sticky="e")
+        merge_btn.grid(row=0, column=3, sticky="e")
         
         # Track selected item
         self.selected_index = None
@@ -284,9 +250,11 @@ class PDFMergerApp(Tk):
         
         # Show/hide empty label
         if not self.pdf_files:
-            self.empty_label.grid(row=0, column=0, pady=50)
+            self.header_frame.grid_forget()
+            self.empty_label.grid(row=1, column=0, pady=50)
             self.selected_index = None
         else:
+            self.header_frame.grid(row=0, column=0, sticky="ew", pady=(0, 4))
             self.empty_label.grid_forget()
         
         # Create rows for each file
@@ -296,7 +264,7 @@ class PDFMergerApp(Tk):
                 fg_color=SELECTION_BG if idx == self.selected_index else "transparent",
                 corner_radius=6
             )
-            row_frame.grid(row=idx * 2 + 1, column=0, pady=2, sticky="ew")
+            row_frame.grid(row=idx * 2 + 2, column=0, pady=2, sticky="ew")
             row_frame.grid_columnconfigure(2, weight=1)
 
             # Drag grip icon
@@ -329,7 +297,26 @@ class PDFMergerApp(Tk):
                 text_color=WARM_GRAY,
                 font=ctk.CTkFont(size=11)
             )
-            date_label.grid(row=0, column=3, padx=(5, 10), pady=8)
+            date_label.grid(row=0, column=3, padx=(5, 5), pady=8)
+
+            # Inline move up/down buttons
+            up_btn = ctk.CTkButton(
+                row_frame, text="▲", width=28, height=28,
+                fg_color="transparent", hover_color=MUTED_RUST,
+                text_color=WARM_GRAY if idx > 0 else ("#D5CCC3", "#3A3A3A"),
+                command=lambda i=idx: self._move_up(i),
+                state="normal" if idx > 0 else "disabled"
+            )
+            up_btn.grid(row=0, column=4, padx=0, pady=2)
+
+            down_btn = ctk.CTkButton(
+                row_frame, text="▼", width=28, height=28,
+                fg_color="transparent", hover_color=MUTED_RUST,
+                text_color=WARM_GRAY if idx < len(self.pdf_files) - 1 else ("#D5CCC3", "#3A3A3A"),
+                command=lambda i=idx: self._move_down(i),
+                state="normal" if idx < len(self.pdf_files) - 1 else "disabled"
+            )
+            down_btn.grid(row=0, column=5, padx=(0, 8), pady=2)
 
             # Bind click on each row widget to identify which row was clicked
             for widget in [row_frame, grip_label, idx_label, name_label, date_label]:
@@ -337,9 +324,6 @@ class PDFMergerApp(Tk):
 
             self.file_rows.append(row_frame)
         
-        # Update count label
-        count = len(self.pdf_files)
-        self.file_count_label.configure(text=f"{count} file{'s' if count != 1 else ''} selected")
     
     def _select_item(self, index):
         """Select an item in the list."""
@@ -490,9 +474,9 @@ class PDFMergerApp(Tk):
             fg_color=RUST,
             corner_radius=2,
         )
-        # File rows use grid rows 1,3,5,... so indicator slots are 0,2,4,...
-        # target_index means "insert before this index", so grid row = target_index * 2
-        indicator_grid_row = target_index * 2
+        # Header is at row 0; file rows use grid rows 2,4,6,...
+        # Indicator slots are at 1,3,5,...
+        indicator_grid_row = target_index * 2 + 1
         self._drag_indicator.grid(row=indicator_grid_row, column=0, sticky="ew", padx=5, pady=0)
 
     def _on_row_drop(self, event):
@@ -530,24 +514,26 @@ class PDFMergerApp(Tk):
         self.selected_index = insert_at
         self._refresh_list()
 
-    def _move_up(self):
-        """Move selected item up in the list."""
-        if self.selected_index is None or self.selected_index == 0:
+    def _move_up(self, idx=None):
+        """Move item up in the list."""
+        if idx is None:
+            idx = self.selected_index
+        if idx is None or idx == 0:
             return
-        
-        idx = self.selected_index
         self.pdf_files[idx], self.pdf_files[idx - 1] = self.pdf_files[idx - 1], self.pdf_files[idx]
-        self.selected_index = idx - 1
+        if self.selected_index == idx:
+            self.selected_index = idx - 1
         self._refresh_list()
-    
-    def _move_down(self):
-        """Move selected item down in the list."""
-        if self.selected_index is None or self.selected_index >= len(self.pdf_files) - 1:
+
+    def _move_down(self, idx=None):
+        """Move item down in the list."""
+        if idx is None:
+            idx = self.selected_index
+        if idx is None or idx >= len(self.pdf_files) - 1:
             return
-        
-        idx = self.selected_index
         self.pdf_files[idx], self.pdf_files[idx + 1] = self.pdf_files[idx + 1], self.pdf_files[idx]
-        self.selected_index = idx + 1
+        if self.selected_index == idx:
+            self.selected_index = idx + 1
         self._refresh_list()
     
     def _remove_selected(self):
