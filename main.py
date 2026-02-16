@@ -13,6 +13,21 @@ from datetime import datetime
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
 
+# Color palette — derived from the app icon
+RUST = "#BA3601"
+RUST_HOVER = "#8E2A01"
+MUTED_RUST = "#6B3020"
+MUTED_RUST_HOVER = "#552518"
+CREAM = "#FCEFD9"
+CREAM_MID = ("#F5E4C8", "#2B2B2B")       # panels / list frame (light, dark)
+CREAM_DEEP = ("#EDD5AE", "#1E1E1E")      # scrollable interior (light, dark)
+SELECTION_BG = ("#E2BA88", "#4A2010")     # selected row (light, dark)
+WARM_GRAY = "#8B8178"
+DIMMED_ROW = ("#E8CDB0", "#2A1A10")      # source row during drag (light, dark)
+FILE_TEXT = ("#5C534A", "#8B8178")        # file name / index text (light, dark)
+BTN_TEXT = "#FCEFD9"                      # button label text (cream on rust)
+
+
 class Tk(ctk.CTk, TkinterDnD.DnDWrapper):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -31,6 +46,7 @@ class PDFMergerApp(Tk):
         # Set appearance
         ctk.set_appearance_mode("system")  # Follow macOS dark/light mode
         ctk.set_default_color_theme("blue")
+        self.configure(fg_color=(CREAM, ctk.ThemeManager.theme["CTk"]["fg_color"][1]))
         
         # Store PDF file paths with metadata
         self.pdf_files = []  # List of dicts: {"path": str, "name": str, "created": datetime}
@@ -56,15 +72,18 @@ class PDFMergerApp(Tk):
         top_frame.grid_columnconfigure(1, weight=1)
         
         add_btn = ctk.CTkButton(
-            top_frame, 
-            text="+ Add PDFs", 
+            top_frame,
+            text="+ Add PDFs",
             command=self._add_files,
-            width=120
+            width=120,
+            fg_color=RUST,
+            hover_color=RUST_HOVER,
+            text_color=BTN_TEXT
         )
         add_btn.grid(row=0, column=0, padx=(0, 10))
         
         # Sort options
-        sort_label = ctk.CTkLabel(top_frame, text="Sort by:")
+        sort_label = ctk.CTkLabel(top_frame, text="Sort by:", text_color=WARM_GRAY)
         sort_label.grid(row=0, column=2, padx=(10, 5))
         
         sort_name_btn = ctk.CTkButton(
@@ -72,29 +91,34 @@ class PDFMergerApp(Tk):
             text="Name",
             command=self._sort_by_name,
             width=80,
-            fg_color="gray40",
-            hover_color="gray30"
+            fg_color=MUTED_RUST,
+            hover_color=MUTED_RUST_HOVER,
+            text_color=BTN_TEXT
         )
         sort_name_btn.grid(row=0, column=3, padx=2)
-        
+
         sort_date_btn = ctk.CTkButton(
             top_frame,
             text="Date Created",
             command=self._sort_by_date,
             width=100,
-            fg_color="gray40",
-            hover_color="gray30"
+            fg_color=MUTED_RUST,
+            hover_color=MUTED_RUST_HOVER,
+            text_color=BTN_TEXT
         )
         sort_date_btn.grid(row=0, column=4, padx=2)
         
         # === Middle frame: List view with scrollbar ===
-        list_frame = ctk.CTkFrame(self)
+        list_frame = ctk.CTkFrame(self, fg_color=CREAM_MID)
         list_frame.grid(row=1, column=0, padx=20, pady=10, sticky="nsew")
         list_frame.grid_columnconfigure(0, weight=1)
         list_frame.grid_rowconfigure(0, weight=1)
-        
+
         # Scrollable frame for the file list
-        self.scrollable_list = ctk.CTkScrollableFrame(list_frame, label_text="Files to Merge")
+        self.scrollable_list = ctk.CTkScrollableFrame(
+            list_frame, label_text="Files to Merge", label_text_color=RUST,
+            fg_color=CREAM_DEEP, label_fg_color=CREAM_MID
+        )
         self.scrollable_list.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
         self.scrollable_list.grid_columnconfigure(0, weight=1)
         
@@ -102,7 +126,7 @@ class PDFMergerApp(Tk):
         self.empty_label = ctk.CTkLabel(
             self.scrollable_list,
             text="No PDFs added yet.\nClick '+ Add PDFs' or drag files here.",
-            text_color="gray50",
+            text_color=WARM_GRAY,
             justify="center"
         )
         self.empty_label.grid(row=0, column=0, pady=50)
@@ -115,15 +139,21 @@ class PDFMergerApp(Tk):
             btn_frame,
             text="▲ Move Up",
             command=self._move_up,
-            width=100
+            width=100,
+            fg_color=RUST,
+            hover_color=RUST_HOVER,
+            text_color=BTN_TEXT
         )
         move_up_btn.pack(pady=(50, 5))
-        
+
         move_down_btn = ctk.CTkButton(
             btn_frame,
             text="▼ Move Down",
             command=self._move_down,
-            width=100
+            width=100,
+            fg_color=RUST,
+            hover_color=RUST_HOVER,
+            text_color=BTN_TEXT
         )
         move_down_btn.pack(pady=5)
         
@@ -132,8 +162,11 @@ class PDFMergerApp(Tk):
             text="✕ Remove",
             command=self._remove_selected,
             width=100,
-            fg_color="firebrick",
-            hover_color="darkred"
+            fg_color="transparent",
+            border_color=RUST,
+            border_width=2,
+            text_color=RUST,
+            hover_color=RUST
         )
         remove_btn.pack(pady=(20, 5))
         
@@ -142,8 +175,9 @@ class PDFMergerApp(Tk):
             text="Clear All",
             command=self._clear_all,
             width=100,
-            fg_color="gray40",
-            hover_color="gray30"
+            fg_color=MUTED_RUST,
+            hover_color=MUTED_RUST_HOVER,
+            text_color=BTN_TEXT
         )
         clear_btn.pack(pady=5)
         
@@ -152,7 +186,7 @@ class PDFMergerApp(Tk):
         bottom_frame.grid(row=2, column=0, padx=20, pady=(10, 20), sticky="ew")
         bottom_frame.grid_columnconfigure(0, weight=1)
         
-        self.file_count_label = ctk.CTkLabel(bottom_frame, text="0 files selected")
+        self.file_count_label = ctk.CTkLabel(bottom_frame, text="0 files selected", text_color=WARM_GRAY)
         self.file_count_label.grid(row=0, column=0, sticky="w")
         
         merge_btn = ctk.CTkButton(
@@ -161,7 +195,10 @@ class PDFMergerApp(Tk):
             command=self._merge_pdfs,
             width=150,
             height=40,
-            font=ctk.CTkFont(size=15, weight="bold")
+            font=ctk.CTkFont(size=15, weight="bold"),
+            fg_color=RUST,
+            hover_color=RUST_HOVER,
+            text_color=BTN_TEXT
         )
         merge_btn.grid(row=0, column=1, sticky="e")
         
@@ -213,7 +250,7 @@ class PDFMergerApp(Tk):
         for idx, file_info in enumerate(self.pdf_files):
             row_frame = ctk.CTkFrame(
                 self.scrollable_list,
-                fg_color="gray25" if idx == self.selected_index else "transparent",
+                fg_color=SELECTION_BG if idx == self.selected_index else "transparent",
                 corner_radius=6
             )
             row_frame.grid(row=idx * 2 + 1, column=0, pady=2, sticky="ew")
@@ -222,21 +259,22 @@ class PDFMergerApp(Tk):
             # Drag grip icon
             grip_label = ctk.CTkLabel(
                 row_frame, text="⠿", width=20,
-                text_color="gray50",
+                text_color=WARM_GRAY,
                 font=ctk.CTkFont(size=14),
                 cursor="hand2"
             )
             grip_label.grid(row=0, column=0, padx=(8, 0), pady=8)
 
             # Index number
-            idx_label = ctk.CTkLabel(row_frame, text=f"{idx + 1}.", width=30)
+            idx_label = ctk.CTkLabel(row_frame, text=f"{idx + 1}.", width=30, text_color=FILE_TEXT)
             idx_label.grid(row=0, column=1, padx=(2, 5), pady=8)
-            
+
             # File name
             name_label = ctk.CTkLabel(
                 row_frame,
                 text=file_info["name"],
-                anchor="w"
+                anchor="w",
+                text_color=FILE_TEXT
             )
             name_label.grid(row=0, column=2, padx=5, pady=8, sticky="ew")
 
@@ -245,7 +283,7 @@ class PDFMergerApp(Tk):
             date_label = ctk.CTkLabel(
                 row_frame,
                 text=date_str,
-                text_color="gray50",
+                text_color=WARM_GRAY,
                 font=ctk.CTkFont(size=11)
             )
             date_label.grid(row=0, column=3, padx=(5, 10), pady=8)
@@ -276,7 +314,7 @@ class PDFMergerApp(Tk):
         target.dnd_bind("<<Drop>>", self._on_drop)
 
     def _on_drop_enter(self, event):
-        self.scrollable_list.configure(border_color="#1f6aa5", border_width=2)
+        self.scrollable_list.configure(border_color=MUTED_RUST, border_width=2)
         return event.action
 
     def _on_drop_leave(self, event):
@@ -341,10 +379,10 @@ class PDFMergerApp(Tk):
         src_row = self.file_rows[self._drag_source_index]
         if not self._drag_active:
             self._drag_active = True
-            src_row.configure(fg_color="gray20")
+            src_row.configure(fg_color=DIMMED_ROW)
             for child in src_row.winfo_children():
                 try:
-                    child.configure(text_color="gray50")
+                    child.configure(text_color=WARM_GRAY)
                 except Exception:
                     pass
             # Create a floating ghost label showing the dragged file name
@@ -352,9 +390,9 @@ class PDFMergerApp(Tk):
             self._drag_ghost = ctk.CTkLabel(
                 self,
                 text=f"  {file_name}  ",
-                fg_color="gray30",
+                fg_color=CREAM,
                 corner_radius=4,
-                text_color="white",
+                text_color="#2B2B2B",
                 font=ctk.CTkFont(size=13),
                 anchor="w",
                 height=30,
@@ -406,7 +444,7 @@ class PDFMergerApp(Tk):
         self._drag_indicator = ctk.CTkFrame(
             self.scrollable_list,
             height=5,
-            fg_color="#1f6aa5",
+            fg_color=RUST,
             corner_radius=2,
         )
         # File rows use grid rows 1,3,5,... so indicator slots are 0,2,4,...
