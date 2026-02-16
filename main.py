@@ -6,11 +6,15 @@ Uses CustomTkinter for modern UI and pypdf for merging
 
 import os
 import re
+import sys
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 from pypdf import PdfWriter
 from datetime import datetime
 from tkinterdnd2 import DND_FILES, TkinterDnD
+
+if sys.platform == "darwin":
+    from AppKit import NSApplication, NSColor, NSApp
 
 
 # Color palette — derived from the app icon
@@ -60,6 +64,8 @@ class PDFMergerApp(Tk):
 
         self._create_ui()
         self._setup_dnd()
+        self.after(100, self._style_titlebar)
+        ctk.AppearanceModeTracker.callback_list.append(self._on_appearance_change)
     
     def _create_ui(self):
         # Main container with padding
@@ -209,7 +215,44 @@ class PDFMergerApp(Tk):
         # Window-level drag/drop bindings so events fire even outside the list
         self.bind("<B1-Motion>", self._on_window_drag)
         self.bind("<ButtonRelease-1>", self._on_row_drop)
-    
+
+    def _style_titlebar(self):
+        """Make the macOS title bar transparent and match the app background."""
+        if sys.platform != "darwin":
+            return
+        try:
+            self._ns_window = None
+            for window in NSApp.windows():
+                if "PDF Stitcher" in (window.title() or ""):
+                    self._ns_window = window
+                    window.setTitlebarAppearsTransparent_(True)
+                    break
+            self._apply_titlebar_color(ctk.get_appearance_mode())
+        except Exception:
+            pass  # Graceful fallback — title bar stays default
+
+    def _on_appearance_change(self, mode):
+        """Called by CustomTkinter when system appearance mode changes."""
+        self._apply_titlebar_color("Dark" if mode == "Dark" or mode == 1 else "Light")
+
+    def _apply_titlebar_color(self, mode):
+        """Set the NSWindow background color to match the current appearance."""
+        if not getattr(self, "_ns_window", None):
+            return
+        try:
+            if mode == "Dark":
+                # Use winfo_rgb to resolve any color name (e.g. "gray14") to RGB
+                rgb = self.winfo_rgb(ctk.ThemeManager.theme["CTk"]["fg_color"][1])
+                r, g, b = rgb[0] / 65535.0, rgb[1] / 65535.0, rgb[2] / 65535.0
+            else:
+                r = int(CREAM[1:3], 16) / 255.0
+                g = int(CREAM[3:5], 16) / 255.0
+                b = int(CREAM[5:7], 16) / 255.0
+            ns_color = NSColor.colorWithSRGBRed_green_blue_alpha_(r, g, b, 1.0)
+            self._ns_window.setBackgroundColor_(ns_color)
+        except Exception:
+            pass
+
     def _add_files(self):
         """Open file dialog to add PDF files."""
         filepaths = filedialog.askopenfilenames(
