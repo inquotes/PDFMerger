@@ -8,18 +8,19 @@ A native macOS desktop app to merge PDF files with a modern, intuitive interface
 
 ## Features
 
-✨ **Modern UI** - Built with CustomTkinter, automatically adapts to macOS dark/light mode
-📄 **Easy File Management** - Add multiple PDFs with native file picker
-📂 **Drag & Drop** - Drag PDF files from Finder directly into the app
-🔄 **Flexible Ordering** - Drag to reorder files, or use Move Up/Down buttons
-📊 **Smart Sorting** - Sort by filename (A-Z) or creation date
-💾 **Native Integration** - Uses macOS native "Save As" dialog
-🎯 **Simple & Fast** - All features in one clean interface
+- **Modern UI** - Built with CustomTkinter with a warm cream and rust color palette, adapts to macOS dark/light mode
+- **Easy File Management** - Add multiple PDFs with native file picker
+- **Drag & Drop** - Drag PDF files from Finder directly into the app
+- **Flexible Ordering** - Drag to reorder files, or use inline arrow buttons on each row
+- **Smart Sorting** - Click "File Name" or "Date" column headers to sort
+- **Native Integration** - Uses macOS native file dialogs and transparent title bar
+- **Simple & Fast** - All features in one clean interface
 
 ## Screenshots
 
-<!-- Add screenshot here later -->
-*Screenshot coming soon*
+| Light Mode | Dark Mode |
+|:---:|:---:|
+| ![Light Mode](assets/LightMode_Screenshot.png) | ![Dark Mode](assets/DarkMode_Screenshot.png) |
 
 ## Requirements
 
@@ -61,9 +62,9 @@ python main.py
 ### Using the App
 
 1. **Add PDFs** - Click "+ Add PDFs" or drag files from Finder into the app
-2. **Reorder** - Drag files by the grip icon (⠿) to reorder, or use Move Up/Down buttons
-3. **Sort** - Use "Name" or "Date Created" buttons to auto-sort
-4. **Remove** - Select and click "Remove" to delete, or "Clear All" to start over
+2. **Reorder** - Drag files by the grip icon (⠿) to reorder, or use the arrow buttons on each row
+3. **Sort** - Click the "File Name" or "Date" column headers to sort
+4. **Remove** - Select a file and click "Remove", or "Clear All" to start over
 5. **Merge** - Click "Merge PDFs" and choose where to save the result
 
 ## Building as a .app
