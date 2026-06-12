@@ -9,7 +9,7 @@ import re
 import sys
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
-from pypdf import PdfWriter
+from pypdf import PdfWriter, PdfReader
 from datetime import datetime
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
@@ -29,6 +29,194 @@ WARM_GRAY = "#8B8178"
 DIMMED_ROW = ("#E8CDB0", "#2A1A10")      # source row during drag (light, dark)
 FILE_TEXT = ("#5C534A", "#8B8178")        # file name / index text (light, dark)
 BTN_TEXT = "#FCEFD9"                      # button label text (cream on rust)
+
+
+def parse_page_range(range_str, total_pages):
+    """
+    Parses a 1-based page range string into a list of 0-based page indices.
+    Examples:
+    - "all" -> list(range(total_pages))
+    - "1-3" -> [0, 1, 2]
+    - "1, 3-5" -> [0, 2, 3, 4]
+    - "3-end" -> [2, 3, 4] (if total_pages = 5)
+    """
+    if not range_str or not range_str.strip():
+        raise ValueError("Empty page range")
+        
+    clean_str = "".join(range_str.split()).lower()
+    if clean_str == "all":
+        return list(range(total_pages))
+        
+    # Validation checks
+    # Disallow invalid characters globally (only digits, commas, hyphens, and 'end' allowed)
+    if not re.match(r'^[0-9,end-]+$', clean_str):
+        raise ValueError("Invalid characters (letters, decimals, or negatives)")
+        
+    if "." in clean_str:
+        raise ValueError("Decimals are not allowed")
+        
+    parts = clean_str.split(",")
+    indices = []
+    
+    for part in parts:
+        if not part:
+            continue
+            
+        if "-" in part:
+            subparts = part.split("-")
+            if len(subparts) != 2:
+                raise ValueError(f"Invalid range format: '{part}'")
+            start_str, end_str = subparts[0], subparts[1]
+            
+            # Start and end of range must be explicit (no negative numbers or open ranges)
+            if not start_str or not end_str:
+                raise ValueError("Incomplete range or negative numbers are not allowed")
+                
+            # Parse start page
+            if not start_str.isdigit():
+                raise ValueError(f"Invalid page number: '{start_str}'")
+            start = int(start_str) - 1
+            if start < 0:
+                raise ValueError(f"Page numbers must be 1 or greater: '{start_str}'")
+                
+            # Parse end page
+            if end_str == "end":
+                end = total_pages - 1
+            elif end_str.isdigit():
+                end = int(end_str) - 1
+            else:
+                raise ValueError(f"Invalid page number: '{end_str}'")
+            if end < 0:
+                raise ValueError(f"Page numbers must be 1 or greater: '{end_str}'")
+                
+            if start > end:
+                raise ValueError(f"Start page {start+1} cannot be greater than end page {end+1}")
+            if start >= total_pages or end >= total_pages:
+                raise ValueError(f"Page number out of range (1-{total_pages}): '{part}'")
+                
+            indices.extend(range(start, end + 1))
+        else:
+            if part == "end":
+                val = total_pages - 1
+            elif part.isdigit():
+                val = int(part) - 1
+            else:
+                raise ValueError(f"Invalid page number: '{part}'")
+                
+            if val < 0:
+                raise ValueError(f"Page numbers must be 1 or greater: '{part}'")
+            if val >= total_pages:
+                raise ValueError(f"Page number {val+1} out of range (1-{total_pages})")
+            indices.append(val)
+            
+    if not indices:
+        raise ValueError("No pages selected")
+    return indices
+
+
+class PageRangeDialog(ctk.CTkToplevel):
+    def __init__(self, parent, file_name, current_range, total_pages):
+        super().__init__(parent)
+        self.title("Edit Page Range")
+        self.geometry("420x330")
+        self.resizable(False, False)
+        
+        # Make the dialog modal
+        self.transient(parent)
+        self.grab_set()
+        self.focus_force()
+        
+        self.file_name = file_name
+        self.total_pages = total_pages
+        self.result = None
+        
+        self.configure(fg_color=(CREAM, ctk.ThemeManager.theme["CTk"]["fg_color"][1]))
+        
+        self.grid_columnconfigure(0, weight=1)
+        
+        # File info label
+        lbl_text = (
+            f"Specify page range for:\n{file_name}\n(Total pages: {total_pages})\n\n"
+            f"Format Examples:\n"
+            f"• 'all' - select all pages\n"
+            f"• '1-3' - range (pages 1 to 3)\n"
+            f"• '1, 3, 5' - individual pages\n"
+            f"• '2-end' - select page 2 to the end"
+        )
+        self.lbl = ctk.CTkLabel(
+            self, text=lbl_text, justify="center", font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=FILE_TEXT
+        )
+        self.lbl.grid(row=0, column=0, padx=20, pady=(20, 10))
+        
+        # Entry field
+        self.entry = ctk.CTkEntry(
+            self, width=280, placeholder_text="e.g. 1-3, 5, 7-end or 'all'",
+            fg_color=CREAM_MID, text_color=FILE_TEXT
+        )
+        self.entry.grid(row=1, column=0, padx=20, pady=10)
+        self.entry.insert(0, current_range)
+        
+        # Error Label
+        self.error_lbl = ctk.CTkLabel(
+            self, text="", text_color="red", font=ctk.CTkFont(size=11)
+        )
+        self.error_lbl.grid(row=2, column=0, padx=20, pady=2)
+        
+        # Buttons Frame
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.grid(row=3, column=0, padx=20, pady=15, sticky="ew")
+        btn_frame.grid_columnconfigure((0, 1), weight=1)
+        
+        cancel_btn = ctk.CTkButton(
+            btn_frame, text="Cancel", fg_color="transparent", border_color=RUST, border_width=2,
+            text_color=RUST, hover_color=SELECTION_BG, command=self._on_cancel
+        )
+        cancel_btn.grid(row=0, column=0, padx=10)
+        
+        ok_btn = ctk.CTkButton(
+            btn_frame, text="OK", fg_color=RUST, hover_color=RUST_HOVER, text_color=BTN_TEXT,
+            command=self._on_ok
+        )
+        ok_btn.grid(row=0, column=1, padx=10)
+        
+        # Key bindings
+        self.bind("<Return>", lambda e: self._on_ok())
+        self.bind("<Escape>", lambda e: self._on_cancel())
+        
+        # Position dialog centered relative to parent
+        self.update_idletasks()
+        parent_x = parent.winfo_x()
+        parent_y = parent.winfo_y()
+        parent_w = parent.winfo_width()
+        parent_h = parent.winfo_height()
+        dialog_w = self.winfo_width()
+        dialog_h = self.winfo_height()
+        
+        x = parent_x + (parent_w - dialog_w) // 2
+        y = parent_y + (parent_h - dialog_h) // 2
+        self.geometry(f"+{x}+{y}")
+        
+        # Force active focus to the text box and highlight existing text
+        self.after(100, lambda: (self.entry.focus_set(), self.entry.select_range(0, 'end')))
+        
+        # Wait for dialog window to close
+        self.wait_window()
+        
+    def _on_ok(self):
+        val = self.entry.get().strip()
+        if not val:
+            val = "all"
+        
+        try:
+            parse_page_range(val, self.total_pages)
+            self.result = val
+            self.destroy()
+        except ValueError as e:
+            self.error_lbl.configure(text=str(e))
+            
+    def _on_cancel(self):
+        self.destroy()
 
 
 class Tk(ctk.CTk, TkinterDnD.DnDWrapper):
@@ -110,17 +298,25 @@ class PDFMergerApp(Tk):
         )
         header_name_btn.grid(row=0, column=2, padx=5, sticky="w")
 
+        # Column 3: Pages header
+        header_pages_lbl = ctk.CTkLabel(
+            self.header_frame, text="Pages",
+            text_color=(RUST, CREAM), font=ctk.CTkFont(size=12, weight="bold"),
+            width=110
+        )
+        header_pages_lbl.grid(row=0, column=3, padx=5)
+
         header_date_btn = ctk.CTkButton(
             self.header_frame, text="Date ↕",
             fg_color="transparent", hover_color=SELECTION_BG,
             text_color=(RUST, CREAM), font=ctk.CTkFont(size=12, weight="bold"),
             command=self._sort_by_date, width=0
         )
-        header_date_btn.grid(row=0, column=3, padx=(5, 5))
+        header_date_btn.grid(row=0, column=4, padx=(5, 5))
 
         # Spacer matching up/down button columns
-        ctk.CTkLabel(self.header_frame, text="", width=28).grid(row=0, column=4)
-        ctk.CTkLabel(self.header_frame, text="", width=28).grid(row=0, column=5, padx=(0, 8))
+        ctk.CTkLabel(self.header_frame, text="", width=28).grid(row=0, column=5)
+        ctk.CTkLabel(self.header_frame, text="", width=28).grid(row=0, column=6, padx=(0, 8))
         
         # Placeholder label when empty
         self.empty_label = ctk.CTkLabel(
@@ -229,6 +425,13 @@ class PDFMergerApp(Tk):
         
         for path in filepaths:
             if path not in [f["path"] for f in self.pdf_files]:
+                try:
+                    reader = PdfReader(path)
+                    num_pages = len(reader.pages)
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to read PDF file:\n{path}\n\nError: {str(e)}", parent=self)
+                    continue
+                
                 # Get file creation time
                 stat = os.stat(path)
                 created = datetime.fromtimestamp(stat.st_birthtime)
@@ -236,7 +439,9 @@ class PDFMergerApp(Tk):
                 self.pdf_files.append({
                     "path": path,
                     "name": os.path.basename(path),
-                    "created": created
+                    "created": created,
+                    "pages_count": num_pages,
+                    "page_range": "all"
                 })
         
         self._refresh_list()
@@ -289,6 +494,26 @@ class PDFMergerApp(Tk):
             )
             name_label.grid(row=0, column=2, padx=5, pady=8, sticky="ew")
 
+            # Page Selection Button
+            current_range = file_info.get("page_range", "all")
+            total_pages = file_info.get("pages_count", 1)
+            btn_text = f"{current_range} ({total_pages} pgs)" if current_range != "all" else f"All ({total_pages} pgs)"
+            
+            pages_btn = ctk.CTkButton(
+                row_frame,
+                text=btn_text,
+                width=110,
+                height=24,
+                fg_color="transparent",
+                border_color=RUST,
+                border_width=1,
+                text_color=FILE_TEXT,
+                hover_color=SELECTION_BG,
+                command=lambda i=idx: self._edit_page_range(i),
+                font=ctk.CTkFont(size=11)
+            )
+            pages_btn.grid(row=0, column=3, padx=5, pady=8)
+
             # Date created (smaller text)
             date_str = file_info["created"].strftime("%Y-%m-%d %H:%M")
             date_label = ctk.CTkLabel(
@@ -297,7 +522,7 @@ class PDFMergerApp(Tk):
                 text_color=WARM_GRAY,
                 font=ctk.CTkFont(size=11)
             )
-            date_label.grid(row=0, column=3, padx=(5, 5), pady=8)
+            date_label.grid(row=0, column=4, padx=(5, 5), pady=8)
 
             # Inline move up/down buttons
             up_btn = ctk.CTkButton(
@@ -307,7 +532,7 @@ class PDFMergerApp(Tk):
                 command=lambda i=idx: self._move_up(i),
                 state="normal" if idx > 0 else "disabled"
             )
-            up_btn.grid(row=0, column=4, padx=0, pady=2)
+            up_btn.grid(row=0, column=5, padx=0, pady=2)
 
             down_btn = ctk.CTkButton(
                 row_frame, text="▼", width=28, height=28,
@@ -316,13 +541,32 @@ class PDFMergerApp(Tk):
                 command=lambda i=idx: self._move_down(i),
                 state="normal" if idx < len(self.pdf_files) - 1 else "disabled"
             )
-            down_btn.grid(row=0, column=5, padx=(0, 8), pady=2)
+            down_btn.grid(row=0, column=6, padx=(0, 8), pady=2)
 
-            # Bind click on each row widget to identify which row was clicked
+            # Bind click on each row widget to identify which row was clicked (excluding buttons)
             for widget in [row_frame, grip_label, idx_label, name_label, date_label]:
                 widget.bind("<Button-1>", lambda e, i=idx: self._on_row_click(e, i))
 
             self.file_rows.append(row_frame)
+
+    def _edit_page_range(self, idx):
+        """Open custom dialog to edit the page range for selected file."""
+        # Highlight the selected row visually without destroying widgets immediately
+        self.selected_index = idx
+        for i, row in enumerate(self.file_rows):
+            row.configure(fg_color=SELECTION_BG if i == idx else "transparent")
+            
+        file_info = self.pdf_files[idx]
+        dialog = PageRangeDialog(
+            self,
+            file_name=file_info["name"],
+            current_range=file_info.get("page_range", "all"),
+            total_pages=file_info.get("pages_count", 1)
+        )
+        if dialog.result is not None:
+            file_info["page_range"] = dialog.result
+            self._refresh_list()
+        self.focus_force()
         
     
     def _select_item(self, index):
@@ -355,21 +599,29 @@ class PDFMergerApp(Tk):
         added = 0
         existing_paths = {f["path"] for f in self.pdf_files}
         for path in paths:
-            if not path.lower().endswith(".pdf"):
-                continue
-            if path in existing_paths:
-                continue
-            if not os.path.isfile(path):
-                continue
-            stat = os.stat(path)
-            created = datetime.fromtimestamp(stat.st_birthtime)
-            self.pdf_files.append({
-                "path": path,
-                "name": os.path.basename(path),
-                "created": created,
-            })
-            existing_paths.add(path)
-            added += 1
+                if not path.lower().endswith(".pdf"):
+                    continue
+                if path in existing_paths:
+                    continue
+                if not os.path.isfile(path):
+                    continue
+                try:
+                    reader = PdfReader(path)
+                    num_pages = len(reader.pages)
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to read PDF file:\n{path}\n\nError: {str(e)}", parent=self)
+                    continue
+                stat = os.stat(path)
+                created = datetime.fromtimestamp(stat.st_birthtime)
+                self.pdf_files.append({
+                    "path": path,
+                    "name": os.path.basename(path),
+                    "created": created,
+                    "pages_count": num_pages,
+                    "page_range": "all"
+                })
+                existing_paths.add(path)
+                added += 1
 
         if added:
             self._refresh_list()
@@ -605,7 +857,13 @@ class PDFMergerApp(Tk):
             writer = PdfWriter()
             
             for file_info in self.pdf_files:
-                writer.append(file_info["path"])
+                path = file_info["path"]
+                page_range = file_info.get("page_range", "all")
+                total_pages = file_info.get("pages_count", 1)
+                
+                # Parse page range to a list of page indices
+                pages_list = parse_page_range(page_range, total_pages)
+                writer.append(path, pages=pages_list)
             
             with open(output_path, "wb") as output_file:
                 writer.write(output_file)
